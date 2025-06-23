@@ -96,20 +96,27 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-kernel-${{ env.KERNEL_BRANCH }}-
 
-    - name: Clone kernel repository
-      if: steps.kernel-cache.outputs.cache-hit != 'true'
+    - name: Setup kernel source
       run: |
-        git clone --depth=1 --single-branch --branch=${KERNEL_BRANCH} \
-          ${KERNEL_REPO} ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+        if [ "${{ steps.kernel-cache.outputs.cache-hit }}" != "true" ]; then
+          echo "Cache miss - cloning fresh repository"
+          rm -rf ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+          git clone --depth=1 --single-branch --branch=${KERNEL_BRANCH} \
+            ${KERNEL_REPO} ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+        else
+          echo "Cache hit - updating existing repository"
+          if [ -d "${GITHUB_WORKSPACE}/${KERNEL_DIR}/.git" ]; then
+            cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+            git fetch origin ${KERNEL_BRANCH}
+            git reset --hard origin/${KERNEL_BRANCH}
+          else
+            echo "Cached directory exists but not a git repository - re-cloning"
+            rm -rf ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+            git clone --depth=1 --single-branch --branch=${KERNEL_BRANCH} \
+              ${KERNEL_REPO} ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+          fi
+        fi
         cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-        echo "Latest commit: $(git log --oneline -1)"
-
-    - name: Update kernel repository
-      if: steps.kernel-cache.outputs.cache-hit == 'true'
-      run: |
-        cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-        git fetch origin ${KERNEL_BRANCH}
-        git reset --hard origin/${KERNEL_BRANCH}
         echo "Latest commit: $(git log --oneline -1)"
 
     - name: Clone AnyKernel3
@@ -195,11 +202,9 @@ jobs:
         if [ -f "$KERNEL_IMAGE" ]; then
           cp "$KERNEL_IMAGE" ${GITHUB_WORKSPACE}/build_output/
           
-          # Create cmdline
-          cat > ${GITHUB_WORKSPACE}/build_output/cmdline.txt << 'EOF'
-        androidboot.console=ttyMSM0 androidboot.hardware=qcom androidboot.memcg=1 androidboot.usbcontroller=a600000.dwc3 cgroup.memory=nokmem,nosocket console=ttyMSM0,115200n8 loop.max_part=7 msm_rtb.filter=0x237 service_locator.enable=1 swiotlb=0 buildvariant=user
-        EOF
-          
+          # Create cmdline with complete parameters
+          echo "androidboot.console=ttyMSM0 androidboot.hardware=qcom androidboot.memcg=1 androidboot.usbcontroller=a600000.dwc3 cgroup.memory=nokmem,nosocket console=ttyMSM0,115200n8 loop.max_part=7 msm_rtb.filter=0x237 service_locator.enable=1 swiotlb=0 pcie_ports=compat iptable_raw.raw_before_defrag=1 ip6table_raw.raw_before_defrag=1" > ${GITHUB_WORKSPACE}/build_output/cmdline.txt
+
           echo "Creating boot image..."
           echo "OS Version: ${ANDROID_OS_VERSION}"
           echo "Security Patch: ${ANDROID_SECURITY_PATCH}"
@@ -426,4 +431,3 @@ jobs:
       run: |
         ccache -s
         df -h
-        
