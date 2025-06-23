@@ -31,6 +31,9 @@ env:
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      deployments: write
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -69,7 +72,6 @@ jobs:
           ${{ runner.os }}-ccache-${{ env.DEVICE_NAME }}-${{ hashFiles('**/Makefile') }}-
           ${{ runner.os }}-ccache-${{ env.DEVICE_NAME }}-
           ${{ runner.os }}-ccache-
-        save-always: true
 
     - name: Cache toolchain
       uses: actions/cache@v4
@@ -81,7 +83,6 @@ jobs:
           ${{ runner.os }}-toolchain-${{ env.CLANG_BRANCH }}-${{ env.GCC_AARCH64_BRANCH }}-
           ${{ runner.os }}-toolchain-${{ env.CLANG_BRANCH }}-
           ${{ runner.os }}-toolchain-
-        save-always: true
 
     - name: Cache kernel source
       uses: actions/cache@v4
@@ -91,7 +92,6 @@ jobs:
         key: ${{ runner.os }}-kernel-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
         restore-keys: |
           ${{ runner.os }}-kernel-${{ env.KERNEL_BRANCH }}-
-        save-always: true
 
     - name: Cache build output
       uses: actions/cache@v4
@@ -102,7 +102,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-build-${{ env.DEVICE_NAME }}-${{ hashFiles('**/Makefile') }}-
           ${{ runner.os }}-build-${{ env.DEVICE_NAME }}-
-        save-always: true
 
     - name: Clone kernel repository
       if: steps.kernel-cache.outputs.cache-hit != 'true'
@@ -226,8 +225,8 @@ jobs:
         do.cleanup=1
         do.cleanuponabort=0
         device.name1=vili
-        device.name2=sm8350
-        supported.versions=14,15
+        device.name2=
+        supported.versions=14,15,16
         supported.patchlevels=
         '; }
         block=/dev/block/bootdevice/by-name/boot;
