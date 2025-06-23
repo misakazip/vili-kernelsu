@@ -96,16 +96,6 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-kernel-${{ env.KERNEL_BRANCH }}-
 
-    - name: Cache build output
-      uses: actions/cache@v4
-      id: build-cache
-      with:
-        path: ${{ env.OUTPUT_DIR }}
-        key: ${{ runner.os }}-build-${{ env.DEVICE_NAME }}-${{ hashFiles('**/Makefile') }}-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-build-${{ env.DEVICE_NAME }}-${{ hashFiles('**/Makefile') }}-
-          ${{ runner.os }}-build-${{ env.DEVICE_NAME }}-
-
     - name: Clone kernel repository
       if: steps.kernel-cache.outputs.cache-hit != 'true'
       run: |
