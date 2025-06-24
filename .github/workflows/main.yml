@@ -189,16 +189,14 @@ jobs:
           cp $DTB_FILES ${GITHUB_WORKSPACE}/build_output/
         fi
 
-    - name: Install mkbootimg
-      run: |
-        pip3 install mkbootimg
-
     - name: Create boot image
       run: |
         KERNEL_IMAGE="${GITHUB_WORKSPACE}/${OUTPUT_DIR}/arch/arm64/boot/Image"
         DTB_IMAGE="${GITHUB_WORKSPACE}/${OUTPUT_DIR}/dtb.img"
         BUILD_DATE=$(date +%Y%m%d-%H%M)
-        
+
+        git clone https://github.com/LineageOS/android_system_tools_mkbootimg.git mkbootimg
+        cd mkbootimg/
         if [ -f "$KERNEL_IMAGE" ]; then
           cp "$KERNEL_IMAGE" ${GITHUB_WORKSPACE}/build_output/
           
@@ -213,7 +211,7 @@ jobs:
             cp "$DTB_IMAGE" ${GITHUB_WORKSPACE}/build_output/
             
             # Create boot.img with DTB
-            python3 -m mkbootimg \
+            python3 ./mkbootimg \
               --kernel "$KERNEL_IMAGE" \
               --dtb "$DTB_IMAGE" \
               --cmdline "$(cat ${GITHUB_WORKSPACE}/build_output/cmdline.txt)" \
@@ -228,7 +226,7 @@ jobs:
               --output ${GITHUB_WORKSPACE}/build_output/boot-${DEVICE_NAME}-${BUILD_DATE}.img
           else
             # Create boot.img without DTB
-            python3 -m mkbootimg \
+            python3 ./mkbootimg \
               --kernel "$KERNEL_IMAGE" \
               --cmdline "$(cat ${GITHUB_WORKSPACE}/build_output/cmdline.txt)" \
               --base ${BOARD_KERNEL_BASE} \
