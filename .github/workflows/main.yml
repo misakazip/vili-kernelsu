@@ -53,14 +53,6 @@ jobs:
         sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
         df -h
 
-    - name: Cache APT packages
-      uses: actions/cache@v4
-      with:
-        path: /var/cache/apt
-        key: ${{ runner.os }}-apt-${{ hashFiles('**/apt-packages.list') }}-${{ github.run_number }}
-        restore-keys: |
-          ${{ runner.os }}-apt-
-
     - name: Set up build environment
       run: |
         sudo apt-get update
@@ -94,35 +86,11 @@ jobs:
           ${{ runner.os }}-toolchain-${{ env.CLANG_BRANCH }}-
           ${{ runner.os }}-toolchain-
 
-    - name: Cache kernel source
-      uses: actions/cache@v4
-      id: kernel-cache
-      with:
-        path: ${{ env.KERNEL_DIR }}
-        key: ${{ runner.os }}-kernel-${{ env.KERNEL_BRANCH }}-${{ github.run_number }}
-        restore-keys: |
-          ${{ runner.os }}-kernel-${{ env.KERNEL_BRANCH }}-
-
     - name: Setup kernel source
       run: |
-        if [ "${{ steps.kernel-cache.outputs.cache-hit }}" != "true" ]; then
-          echo "Cache miss - cloning fresh repository"
-          rm -rf ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-          git clone --depth=1 --single-branch --branch=${KERNEL_BRANCH} \
-            ${KERNEL_REPO} ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-        else
-          echo "Cache hit - updating existing repository"
-          if [ -d "${GITHUB_WORKSPACE}/${KERNEL_DIR}/.git" ]; then
-            cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-            git fetch origin ${KERNEL_BRANCH}
-            git reset --hard origin/${KERNEL_BRANCH}
-          else
-            echo "Cached directory exists but not a git repository - re-cloning"
-            rm -rf ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-            git clone --depth=1 --single-branch --branch=${KERNEL_BRANCH} \
-              ${KERNEL_REPO} ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-          fi
-        fi
+        echo "Cloning fresh repository"
+        rm -rf ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+        git clone --depth=1 --single-branch --branch=${KERNEL_BRANCH} ${KERNEL_REPO} ${GITHUB_WORKSPACE}/${KERNEL_DIR}
         cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
         echo "Latest commit: $(git log --oneline -1)"
 
