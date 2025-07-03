@@ -35,8 +35,8 @@ env:
   BOARD_BOOT_HEADER_VERSION: "3"
   BOARD_KERNEL_IMAGE_NAME: "Image"
   # Android OS version and security patch level
-  ANDROID_OS_VERSION: "15.2"
-  ANDROID_SECURITY_PATCH: "2025-05"
+  ANDROID_OS_VERSION: "15.0.0"
+  ANDROID_SECURITY_PATCH: "2025-06"
 
 jobs:
   build-kernel:
