@@ -1,4 +1,4 @@
-# Vili KernelSU Build
+# Vili KernelSU Next Build
 
 🚀 **Android kernel build with KernelSU integration for Xiaomi 11T Pro (vili)**
 
@@ -11,7 +11,7 @@
 
 ## ✨ Features
 
-- 🔓 **KernelSU Integration**: Root access management
+- 🔓 **KernelSU Next Integration**: Root access management
 - 🛠️ **LineageOS Toolchain**: Clang + GCC toolchain
 - 🏗️ **Automated Build**: GitHub Actions CI/CD
 - 📦 **Multiple Outputs**: AnyKernel3 zip, boot.img, kernel Image
@@ -41,7 +41,7 @@ fastboot flash boot boot-vili-YYYYMMDD-HHMM.img
 fastboot reboot
 ```
 
-## 🔒 KernelSU
+## 🔒 KernelSU Next
 
 KernelSU provides kernel-level root access management with:
 
