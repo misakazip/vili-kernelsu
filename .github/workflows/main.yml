@@ -130,7 +130,7 @@ jobs:
       if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.kernelsu == 'true' || github.event_name != 'workflow_dispatch' }}
       run: |
         cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-        curl -LSs "curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+        curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
         echo "KernelSU integration added"
 
     - name: Clone AnyKernel3
