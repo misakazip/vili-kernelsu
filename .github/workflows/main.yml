@@ -30,8 +30,6 @@ env:
   TOOLCHAIN_DIR: "toolchain"
   OUTPUT_DIR: "out"
   KERNELSU_DIR: "KernelSU"
-  BOARD_KERNEL_PAGESIZE: "4096"
-  BOARD_KERNEL_BASE: "0x00000000"
   BOARD_BOOT_HEADER_VERSION: "3"
   BOARD_KERNEL_IMAGE_NAME: "Image"
   # Android OS version and security patch level
@@ -65,31 +63,9 @@ jobs:
         mkdir -p ${GITHUB_WORKSPACE}/${OUTPUT_DIR}
         mkdir -p ${GITHUB_WORKSPACE}/build_output
 
-    - name: Cache ccache
-      uses: actions/cache@v4
-      with:
-        path: ~/.ccache
-        key: ${{ runner.os }}-ccache-${{ env.DEVICE_NAME }}-${{ hashFiles('**/Makefile') }}-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-ccache-${{ env.DEVICE_NAME }}-${{ hashFiles('**/Makefile') }}-
-          ${{ runner.os }}-ccache-${{ env.DEVICE_NAME }}-
-          ${{ runner.os }}-ccache-
-
-    - name: Cache toolchain
-      uses: actions/cache@v4
-      id: toolchain-cache
-      with:
-        path: ${{ env.TOOLCHAIN_DIR }}
-        key: ${{ runner.os }}-toolchain-${{ env.CLANG_BRANCH }}-${{ env.GCC_AARCH64_BRANCH }}-${{ env.GCC_ARM_BRANCH }}
-        restore-keys: |
-          ${{ runner.os }}-toolchain-${{ env.CLANG_BRANCH }}-${{ env.GCC_AARCH64_BRANCH }}-
-          ${{ runner.os }}-toolchain-${{ env.CLANG_BRANCH }}-
-          ${{ runner.os }}-toolchain-
-
     - name: Setup kernel source
       run: |
         echo "Cloning fresh repository"
-        rm -rf ${GITHUB_WORKSPACE}/${KERNEL_DIR}
         git clone --depth=1 --single-branch --branch=${KERNEL_BRANCH} ${KERNEL_REPO} ${GITHUB_WORKSPACE}/${KERNEL_DIR}
         cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
         echo "Latest commit: $(git log --oneline -1)"
@@ -108,7 +84,6 @@ jobs:
         fi
 
     - name: Download Lineage toolchain
-      if: steps.toolchain-cache.outputs.cache-hit != 'true'
       run: |
         mkdir -p ${GITHUB_WORKSPACE}/${TOOLCHAIN_DIR}
         cd ${GITHUB_WORKSPACE}/${TOOLCHAIN_DIR}
@@ -178,8 +153,7 @@ jobs:
           CLANG_TRIPLE=aarch64-linux-gnu- \
           CROSS_COMPILE=aarch64-buildroot-linux-gnu- \
           CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-          LLVM=1 LLVM_IAS=1 -j${THREADS} \
-          Image dtbs 2>&1 | tee ${GITHUB_WORKSPACE}/build_output/build_log.txt
+          LLVM=1 LLVM_IAS=1 -j${THREADS} 2>&1 | tee ${GITHUB_WORKSPACE}/build_output/build_log.txt
         
         if [ ! -f "${GITHUB_WORKSPACE}/${OUTPUT_DIR}/arch/arm64/boot/Image" ]; then
           echo "ERROR: Kernel build failed, Image not found"
@@ -188,65 +162,28 @@ jobs:
         fi
         ccache -s
 
-    - name: Build DTB image
-      run: |
-        cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
-        DTB_FILES=$(find ${GITHUB_WORKSPACE}/${OUTPUT_DIR}/arch/arm64/boot/dts -name "*.dtb" | sort)
-        if [ -n "$DTB_FILES" ]; then
-          cat $DTB_FILES > ${GITHUB_WORKSPACE}/${OUTPUT_DIR}/dtb.img
-          cp $DTB_FILES ${GITHUB_WORKSPACE}/build_output/
-        fi
-
     - name: Create boot image
       run: |
         KERNEL_IMAGE="${GITHUB_WORKSPACE}/${OUTPUT_DIR}/arch/arm64/boot/Image"
-        DTB_IMAGE="${GITHUB_WORKSPACE}/${OUTPUT_DIR}/dtb.img"
         BUILD_DATE=$(date +%Y%m%d-%H%M)
 
         git clone https://github.com/LineageOS/android_system_tools_mkbootimg.git mkbootimg
         cd mkbootimg/
-        if [ -f "$KERNEL_IMAGE" ]; then
-          cp "$KERNEL_IMAGE" ${GITHUB_WORKSPACE}/build_output/
-          
-          # Create cmdline with complete parameters
-          echo "androidboot.console=ttyMSM0 androidboot.hardware=qcom androidboot.memcg=1 androidboot.usbcontroller=a600000.dwc3 cgroup.memory=nokmem,nosocket console=ttyMSM0,115200n8 loop.max_part=7 msm_rtb.filter=0x237 service_locator.enable=1 swiotlb=0 pcie_ports=compat iptable_raw.raw_before_defrag=1 ip6table_raw.raw_before_defrag=1" > ${GITHUB_WORKSPACE}/build_output/cmdline.txt
+        cp "$KERNEL_IMAGE" ${GITHUB_WORKSPACE}/build_output/
 
-          echo "Creating boot image..."
-          echo "OS Version: ${ANDROID_OS_VERSION}"
-          echo "Security Patch: ${ANDROID_SECURITY_PATCH}"
-          
-          if [ -f "$DTB_IMAGE" ]; then
-            cp "$DTB_IMAGE" ${GITHUB_WORKSPACE}/build_output/
-            
-            # Create boot.img with DTB
-            python3 ./mkbootimg.py \
-              --kernel "$KERNEL_IMAGE" \
-              --dtb "$DTB_IMAGE" \
-              --cmdline "$(cat ${GITHUB_WORKSPACE}/build_output/cmdline.txt)" \
-              --base ${BOARD_KERNEL_BASE} \
-              --kernel_offset 0x00008000 \
-              --ramdisk_offset 0x01000000 \
-              --tags_offset 0x00000100 \
-              --pagesize ${BOARD_KERNEL_PAGESIZE} \
-              --header_version ${BOARD_BOOT_HEADER_VERSION} \
-              --os_version ${ANDROID_OS_VERSION} \
-              --os_patch_level ${ANDROID_SECURITY_PATCH} \
-              --output ${GITHUB_WORKSPACE}/build_output/boot-${DEVICE_NAME}-${BUILD_DATE}.img
-          else
-            # Create boot.img without DTB
-            python3 ./mkbootimg.py \
-              --kernel "$KERNEL_IMAGE" \
-              --cmdline "$(cat ${GITHUB_WORKSPACE}/build_output/cmdline.txt)" \
-              --base ${BOARD_KERNEL_BASE} \
-              --kernel_offset 0x00008000 \
-              --ramdisk_offset 0x01000000 \
-              --tags_offset 0x00000100 \
-              --pagesize ${BOARD_KERNEL_PAGESIZE} \
-              --header_version ${BOARD_BOOT_HEADER_VERSION} \
-              --os_version ${ANDROID_OS_VERSION} \
-              --os_patch_level ${ANDROID_SECURITY_PATCH} \
-              --output ${GITHUB_WORKSPACE}/build_output/boot-${DEVICE_NAME}-${BUILD_DATE}.img
-          fi
+        wget https://github.com/misakazip/vili-kernelsu/raw/refs/heads/main/ramdisk -O ./ramdisk
+
+        echo "Creating boot image..."
+        echo "OS Version: ${ANDROID_OS_VERSION}"
+        echo "Security Patch: ${ANDROID_SECURITY_PATCH}"
+
+        python3 ./mkbootimg.py \
+          --kernel "$KERNEL_IMAGE" \
+          --ramdisk ./ramdisk \
+          --header_version ${BOARD_BOOT_HEADER_VERSION} \
+          --os_version ${ANDROID_OS_VERSION} \
+          --os_patch_level ${ANDROID_SECURITY_PATCH} \
+          --output ${GITHUB_WORKSPACE}/build_output/boot-${DEVICE_NAME}-${BUILD_DATE}.img
           
           echo "Boot image created: boot-${DEVICE_NAME}-${BUILD_DATE}.img"
           ls -la ${GITHUB_WORKSPACE}/build_output/boot-*.img
@@ -264,42 +201,8 @@ jobs:
       run: |
         cd ${GITHUB_WORKSPACE}/${ANYKERNEL_DIR}
         rm -f Image.gz Image zImage dtb *.img
-        cat > anykernel.sh << 'EOF'
-        # AnyKernel3 Script
-        properties() { '
-        kernel.string=vili kernel build with KernelSU
-        do.devicecheck=0
-        do.modules=0
-        do.systemless=1
-        do.cleanup=1
-        do.cleanuponabort=0
-        device.name1=vili
-        device.name2=
-        supported.versions=14,15,16
-        supported.patchlevels=
-        '; }
-        block=/dev/block/bootdevice/by-name/boot;
-        is_slot_device=true;
-        ramdisk_compression=lz4;
-        patch_vbmeta_flag=auto;
-        boot_header_version=3;
-        kernel_offset=0x00008000;
-        ramdisk_offset=0x01000000;
-        tags_offset=0x00000100;
-        page_size=4096;
-        base=0x00000000;
-        . tools/ak3-core.sh;
-        set_perm_recursive 0 0 755 644 $ramdisk/*;
-        set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
-        dump_boot;
-        write_boot;
-        ## end install
-        EOF
         if [ -f "${GITHUB_WORKSPACE}/build_output/Image" ]; then
           cp ${GITHUB_WORKSPACE}/build_output/Image ./
-        fi
-        if [ -f "${GITHUB_WORKSPACE}/build_output/dtb.img" ]; then
-          cp ${GITHUB_WORKSPACE}/build_output/dtb.img ./dtb
         fi
         BUILD_DATE=$(date +%Y%m%d-%H%M)
         KERNELSU_TAG=""
@@ -329,9 +232,6 @@ jobs:
         if [ -f "${GITHUB_WORKSPACE}/build_output/Image" ]; then
           BUILT_FILES="${BUILT_FILES}\n- Image ($(du -h ${GITHUB_WORKSPACE}/build_output/Image | cut -f1))"
         fi
-        if [ -f "${GITHUB_WORKSPACE}/build_output/dtb.img" ]; then
-          BUILT_FILES="${BUILT_FILES}\n- dtb.img ($(du -h ${GITHUB_WORKSPACE}/build_output/dtb.img | cut -f1))"
-        fi
         if ls ${GITHUB_WORKSPACE}/build_output/boot-*.img 1> /dev/null 2>&1; then
           for boot in ${GITHUB_WORKSPACE}/build_output/boot-*.img; do
             BUILT_FILES="${BUILT_FILES}\n- $(basename $boot) ($(du -h $boot | cut -f1))"
@@ -355,8 +255,6 @@ jobs:
         KernelSU Status: ${KERNELSU_STATUS}
         Boot Image Configuration:
         - Header Version: ${BOARD_BOOT_HEADER_VERSION}
-        - Page Size: ${BOARD_KERNEL_PAGESIZE}
-        - Base Address: ${BOARD_KERNEL_BASE}
         - Kernel Image Name: ${BOARD_KERNEL_IMAGE_NAME}
         - Android OS Version: ${ANDROID_OS_VERSION}
         - Security Patch Level: ${ANDROID_SECURITY_PATCH}
@@ -384,9 +282,7 @@ jobs:
           build_output/*.zip
           build_output/*.img
           build_output/Image
-          build_output/*.dtb
           build_output/build_info.txt
-          build_output/cmdline.txt
           build_output/build_log.txt
         retention-days: 30
         compression-level: 9
@@ -412,8 +308,6 @@ jobs:
 
           **Boot Configuration:**
           - Header Version: ${{ env.BOARD_BOOT_HEADER_VERSION }}
-          - Page Size: ${{ env.BOARD_KERNEL_PAGESIZE }}
-          - Base Address: ${{ env.BOARD_KERNEL_BASE }}
           - Kernel Image: ${{ env.BOARD_KERNEL_IMAGE_NAME }}
           - Android OS Version: ${{ env.ANDROID_OS_VERSION }}
           - Security Patch: ${{ env.ANDROID_SECURITY_PATCH }}
