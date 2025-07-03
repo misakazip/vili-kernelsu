@@ -2,6 +2,12 @@ name: Android Kernel Build (vili sm8350)
 
 on:
   workflow_dispatch:
+    inputs:
+      kernelsu:
+        description: 'Build with KernelSU integration'
+        required: true
+        default: true
+        type: boolean
   push:
     branches: [ main, master ]
   schedule:
@@ -23,6 +29,7 @@ env:
   ANYKERNEL_DIR: "anykernel3"
   TOOLCHAIN_DIR: "toolchain"
   OUTPUT_DIR: "out"
+  KERNELSU_DIR: "KernelSU"
   BOARD_KERNEL_PAGESIZE: "4096"
   BOARD_KERNEL_BASE: "0x00000000"
   BOARD_BOOT_HEADER_VERSION: "3"
@@ -119,6 +126,13 @@ jobs:
         cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
         echo "Latest commit: $(git log --oneline -1)"
 
+    - name: Download KernelSU
+      if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.kernelsu == 'true' || github.event_name != 'workflow_dispatch' }}
+      run: |
+        cd ${GITHUB_WORKSPACE}/${KERNEL_DIR}
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+        echo "KernelSU integration added"
+
     - name: Clone AnyKernel3
       run: |
         if [ ! -d "${GITHUB_WORKSPACE}/${ANYKERNEL_DIR}" ]; then
@@ -141,9 +155,26 @@ jobs:
         GCC_ARM_PATH="${GITHUB_WORKSPACE}/${TOOLCHAIN_DIR}/gcc-arm/bin"
         echo "PATH=${CLANG_PATH}:${GCC_AARCH64_PATH}:${GCC_ARM_PATH}:${PATH}" >> $GITHUB_ENV
         echo "CLANG_PATH=${CLANG_PATH}" >> $GITHUB_ENV
-        ${CLANG_PATH}/clang --version
-        ${GCC_AARCH64_PATH}/aarch64-buildroot-linux-gnu-gcc --version
-        ${GCC_ARM_PATH}/arm-linux-androideabi-gcc --version
+        if [ -f "${CLANG_PATH}/clang" ]; then
+          ${CLANG_PATH}/clang --version
+        else
+          echo "ERROR: clang binary not found at ${CLANG_PATH}/clang"
+          exit 1
+        fi
+        
+        if [ -f "${GCC_AARCH64_PATH}/aarch64-buildroot-linux-gnu-gcc" ]; then
+          ${GCC_AARCH64_PATH}/aarch64-buildroot-linux-gnu-gcc --version
+        else
+          echo "ERROR: aarch64 gcc binary not found at ${GCC_AARCH64_PATH}/aarch64-buildroot-linux-gnu-gcc"
+          exit 1
+        fi
+        
+        if [ -f "${GCC_ARM_PATH}/arm-linux-androideabi-gcc" ]; then
+          ${GCC_ARM_PATH}/arm-linux-androideabi-gcc --version
+        else
+          echo "ERROR: arm gcc binary not found at ${GCC_ARM_PATH}/arm-linux-androideabi-gcc"
+          exit 1
+        fi
 
     - name: Configure kernel
       run: |
@@ -152,10 +183,12 @@ jobs:
         export CROSS_COMPILE=aarch64-buildroot-linux-gnu-
         export CROSS_COMPILE_ARM32=arm-linux-androideabi-
         export CC=clang CLANG_TRIPLE=aarch64-buildroot-linux-gnu-
-        if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
-          make clean && make mrproper
-        fi
+        make clean && make mrproper
         make O=${GITHUB_WORKSPACE}/${OUTPUT_DIR} ${DEFCONFIG}
+        # Enable KernelSU if requested
+        if [ "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.kernelsu == 'true' || github.event_name != 'workflow_dispatch' }}" = "true" ]; then
+          echo "CONFIG_KSU=y" >> ${GITHUB_WORKSPACE}/${OUTPUT_DIR}/.config
+        fi
 
     - name: Build kernel
       run: |
@@ -170,6 +203,7 @@ jobs:
         aarch64-buildroot-linux-gnu-gcc --version | head -1
         arm-linux-androideabi-gcc --version | head -1
         ccache -s
+        set -o pipefail
         make O=${GITHUB_WORKSPACE}/${OUTPUT_DIR} \
           ARCH=${ARCH} \
           CC=clang \
@@ -177,7 +211,13 @@ jobs:
           CROSS_COMPILE=aarch64-buildroot-linux-gnu- \
           CROSS_COMPILE_ARM32=arm-linux-androideabi- \
           LLVM=1 LLVM_IAS=1 -j${THREADS} \
-          Image dtbs
+          Image dtbs 2>&1 | tee ${GITHUB_WORKSPACE}/build_output/build_log.txt
+        
+        if [ ! -f "${GITHUB_WORKSPACE}/${OUTPUT_DIR}/arch/arm64/boot/Image" ]; then
+          echo "ERROR: Kernel build failed, Image not found"
+          tail -n 200 ${GITHUB_WORKSPACE}/build_output/build_log.txt
+          exit 1
+        fi
         ccache -s
 
     - name: Build DTB image
@@ -259,7 +299,7 @@ jobs:
         cat > anykernel.sh << 'EOF'
         # AnyKernel3 Script
         properties() { '
-        kernel.string=vili kernel build
+        kernel.string=vili kernel build with KernelSU
         do.devicecheck=0
         do.modules=0
         do.systemless=1
@@ -294,7 +334,11 @@ jobs:
           cp ${GITHUB_WORKSPACE}/build_output/dtb.img ./dtb
         fi
         BUILD_DATE=$(date +%Y%m%d-%H%M)
-        zip -r9 ${GITHUB_WORKSPACE}/build_output/${DEVICE_NAME}-kernel-${BUILD_DATE}.zip \
+        KERNELSU_TAG=""
+        if [ "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.kernelsu == 'true' || github.event_name != 'workflow_dispatch' }}" = "true" ]; then
+          KERNELSU_TAG="-kernelsu"
+        fi
+        zip -r9 ${GITHUB_WORKSPACE}/build_output/${DEVICE_NAME}-kernel${KERNELSU_TAG}-${BUILD_DATE}.zip \
           * -x .git README.md *placeholder
 
     - name: Generate build info
@@ -307,6 +351,12 @@ jobs:
         CLANG_VER=$(clang --version | head -1)
         GCC_AARCH64_VER=$(aarch64-buildroot-linux-gnu-gcc --version | head -1)
         GCC_ARM_VER=$(arm-linux-androideabi-gcc --version | head -1)
+        
+        KERNELSU_STATUS="Disabled"
+        if [ "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.kernelsu == 'true' || github.event_name != 'workflow_dispatch' }}" = "true" ]; then
+          KERNELSU_STATUS="Enabled"
+        fi
+        
         BUILT_FILES=""
         if [ -f "${GITHUB_WORKSPACE}/build_output/Image" ]; then
           BUILT_FILES="${BUILT_FILES}\n- Image ($(du -h ${GITHUB_WORKSPACE}/build_output/Image | cut -f1))"
@@ -334,6 +384,7 @@ jobs:
         - Architecture: ${ARCH}
         - Defconfig: ${DEFCONFIG}
         - Device: ${DEVICE_NAME}
+        KernelSU Status: ${KERNELSU_STATUS}
         Boot Image Configuration:
         - Header Version: ${BOARD_BOOT_HEADER_VERSION}
         - Page Size: ${BOARD_KERNEL_PAGESIZE}
@@ -368,6 +419,7 @@ jobs:
           build_output/*.dtb
           build_output/build_info.txt
           build_output/cmdline.txt
+          build_output/build_log.txt
         retention-days: 30
         compression-level: 9
 
@@ -386,6 +438,9 @@ jobs:
           - Defconfig: ${{ env.DEFCONFIG }}
           - Build Date: ${{ github.run_number }}
           - Builder: misakazip
+
+          **Features:**
+          - KernelSU: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.kernelsu == 'true' || github.event_name != 'workflow_dispatch' && 'Enabled' || 'Disabled' }}
 
           **Boot Configuration:**
           - Header Version: ${{ env.BOARD_BOOT_HEADER_VERSION }}
