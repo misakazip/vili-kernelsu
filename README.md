@@ -28,18 +28,18 @@
 
 ### Installation
 
-#### Method 1: AnyKernel3 (Recommended)
-
-1. Boot into custom recovery (TWRP/OrangeFox)
-2. Flash `vili-kernel-kernelsu-YYYYMMDD-HHMM.zip`
-3. Reboot
-
-#### Method 2: Fastboot
+#### Method 1: Fastboot (Recommended)
 
 ```bash
 fastboot flash boot boot-vili-YYYYMMDD-HHMM.img
 fastboot reboot
 ```
+
+#### Method 2: AnyKernel3
+
+1. Boot into custom recovery (TWRP/OrangeFox)
+2. Flash `vili-kernel-kernelsu-YYYYMMDD-HHMM.zip`
+3. Reboot
 
 ## 🔒 KernelSU Next
 
