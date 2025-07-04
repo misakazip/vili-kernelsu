@@ -171,6 +171,7 @@ jobs:
         cd mkbootimg/
         cp "$KERNEL_IMAGE" ${GITHUB_WORKSPACE}/build_output/
 
+        echo "Downloading ramdisk..."
         wget https://github.com/misakazip/vili-kernelsu/raw/refs/heads/main/ramdisk -O ./ramdisk
 
         echo "Creating boot image..."
@@ -187,7 +188,6 @@ jobs:
           
           echo "Boot image created: boot-${DEVICE_NAME}-${BUILD_DATE}.img"
           ls -la ${GITHUB_WORKSPACE}/build_output/boot-*.img
-        fi
 
     - name: Extract build artifacts
       run: |
