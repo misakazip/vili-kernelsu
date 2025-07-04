@@ -171,7 +171,6 @@ jobs:
         cd mkbootimg/
         cp "$KERNEL_IMAGE" ${GITHUB_WORKSPACE}/build_output/
 
-        echo "Downloading ramdisk..."
         wget https://github.com/misakazip/vili-kernelsu/raw/refs/heads/main/ramdisk -O ./ramdisk
 
         echo "Creating boot image..."
@@ -188,6 +187,7 @@ jobs:
           
           echo "Boot image created: boot-${DEVICE_NAME}-${BUILD_DATE}.img"
           ls -la ${GITHUB_WORKSPACE}/build_output/boot-*.img
+        fi
 
     - name: Extract build artifacts
       run: |
@@ -289,7 +289,7 @@ jobs:
 
     - name: Create release
       if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && success()
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: kernel-${{ env.DEVICE_NAME }}-${{ github.run_number }}
         name: Android Kernel Build - ${{ env.DEVICE_NAME }} (${{ env.ARCH }})
@@ -325,15 +325,13 @@ jobs:
           - 📦 AnyKernel3 flashable zip
           - 🥾 Boot image (boot.img) - Ready to flash
           - 🐧 Kernel image (Image)
-          - 🌳 Device tree blob image (dtb.img)
           - 📄 Build information
 
           **Installation:**
-          1. Flash the AnyKernel3 zip via custom recovery (recommended)
-          2. Or flash the boot.img directly via fastboot: `fastboot flash boot boot-vili-YYYYMMDD-HHMM.img`
+          1. Flash the boot.img directly via fastboot: `fastboot flash boot boot-vili-YYYYMMDD-HHMM.img` (recommended)
+          2. Or Flash the AnyKernel3 zip via custom recovery
         files: |
             build_output/*.zip
-            build_output/boot-*.img
             build_output/*.img
             build_output/build_info.txt
         draft: false
